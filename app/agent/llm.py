@@ -1,29 +1,29 @@
 from __future__ import annotations
 
+from app.agent.gemini import generate_text
 from app.config import settings
+
+_last_error: str | None = None
 
 
 def llm_available() -> bool:
-    return bool(settings.openai_api_key)
+    return bool(settings.gemini_api_key)
+
+
+def last_llm_error() -> str | None:
+    return _last_error
 
 
 def ask_llm(system_prompt: str, user_prompt: str) -> str | None:
-    if not settings.openai_api_key:
-        return None
+    global _last_error
+    _last_error = None
 
-    try:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
-        response = client.chat.completions.create(
-            model=settings.openai_chat_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
-        )
-        return response.choices[0].message.content or ""
-    except Exception:
-        return None
-
+    text, error = generate_text(
+        model=settings.gemini_chat_model,
+        user_prompt=user_prompt,
+        system_prompt=system_prompt,
+        temperature=0.2,
+    )
+    if error:
+        _last_error = error
+    return text

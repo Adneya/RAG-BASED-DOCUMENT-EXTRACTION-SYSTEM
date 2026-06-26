@@ -202,10 +202,15 @@ def looks_like_code(text: str) -> bool:
         r"\bdef\s+\w+\s*\(",
         r"\bclass\s+\w+",
         r"\bfunction\s+\w*\s*\(",
+        r"\b(?:const|let|var)\s+\w+\s*=",
+        r"\bfor\s+\w+\s+in\s+",
         r"\bfor\s*\(",
+        r"\bwhile\s+.+:",
         r"\bwhile\s*\(",
+        r"\bif\s+.+:",
         r"\bif\s*\(",
         r"\bimport\s+\w+",
+        r"\bfrom\s+\w+\s+import\s+",
         r"#include\s*<",
         r"console\.log",
         r"SELECT\s+.+\s+FROM",
@@ -214,4 +219,3 @@ def looks_like_code(text: str) -> bool:
         return True
     symbols = sum(text.count(char) for char in "{}();=<>")
     return symbols >= 8 and "\n" in text
-

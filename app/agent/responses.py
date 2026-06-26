@@ -4,7 +4,7 @@ import re
 from collections import Counter
 
 from app.agent.intent import looks_like_code
-from app.agent.llm import ask_llm
+from app.agent.llm import ask_llm, last_llm_error, llm_available
 from app.schemas import ExtractedContent
 from app.tools.text_processing import (
     clean_text,
@@ -52,16 +52,24 @@ NEGATIVE_WORDS = {
 
 
 def render_response(intent: str, query: str, contents: list[ExtractedContent]) -> str:
-    text = join_content(contents)
+    text = join_text(contents)
     if intent == "extract_text":
         return format_extracted_text(contents)
     if intent in {"summary", "audio_summary", "youtube_summary"}:
-        summary = summarize_text(text or task_payload(query))
+        summary_text = text if contents else task_payload(query)
+        if intent == "audio_summary":
+            audio_text = join_text(contents, source_type="audio")
+            summary_text = audio_text if audio_text else ""
+        if intent == "youtube_summary":
+            youtube_text = join_text(contents, source_type="youtube")
+            summary_text = youtube_text if youtube_text else ""
+
+        summary = summarize_text(summary_text)
         if intent == "audio_summary":
             duration_lines = [
-                f"{item.filename}: {item.duration_seconds} seconds"
+                f"{item.filename}: {format_duration(item.duration_seconds)}"
                 for item in contents
-                if item.source_type == "audio" and item.duration_seconds is not None
+                if item.source_type == "audio"
             ]
             if duration_lines:
                 summary += "\n\nDuration:\n" + "\n".join(f"- {line}" for line in duration_lines)
@@ -85,6 +93,33 @@ def join_content(contents: list[ExtractedContent]) -> str:
             f"Source: {item.filename}\n{item.text}" for item in contents if item.text.strip()
         )
     )
+
+
+def join_text(contents: list[ExtractedContent], source_type: str | None = None) -> str:
+    return clean_text(
+        "\n\n".join(
+            item.text
+            for item in contents
+            if item.text.strip()
+            and (source_type is None or item.source_type == source_type)
+        )
+    )
+
+
+def format_duration(duration_seconds: float | None) -> str:
+    if duration_seconds is None:
+        return "duration unavailable"
+
+    total_seconds = max(0, int(round(duration_seconds)))
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        readable = f"{hours}h {minutes:02d}m {seconds:02d}s"
+    elif minutes:
+        readable = f"{minutes}m {seconds:02d}s"
+    else:
+        readable = f"{seconds}s"
+    return f"{readable} ({duration_seconds:g} seconds)"
 
 
 def format_extracted_text(contents: list[ExtractedContent]) -> str:
@@ -168,9 +203,13 @@ def explain_code(text: str) -> str:
 
 def detect_language(text: str) -> str:
     lowered = text.lower()
-    if re.search(r"\bdef\s+\w+\s*\(", text):
+    if re.search(r"\bdef\s+\w+\s*\(", text) or re.search(r"\bfor\s+\w+\s+in\s+", text):
         return "Python"
-    if "console.log" in lowered or re.search(r"\bfunction\s+\w*\s*\(", text):
+    if (
+        "console.log" in lowered
+        or re.search(r"\bfunction\s+\w*\s*\(", text)
+        or re.search(r"\b(?:const|let|var)\s+\w+\s*=", text)
+    ):
         return "JavaScript/TypeScript"
     if "#include" in lowered:
         return "C or C++"
@@ -322,9 +361,16 @@ def conversational_answer(query: str) -> str:
     )
     if llm_answer:
         return clean_text(llm_answer)
+    if llm_available():
+        error = last_llm_error()
+        detail = f" Last error: {truncate_words(error, 40)}" if error else ""
+        return (
+            "Gemini is configured, but the model request failed."
+            f"{detail} Check your API key, model access, or network."
+        )
     return (
         "I can help with that. In this local fallback mode, open-ended general answers "
-        "are limited unless OPENAI_API_KEY is configured. You can still upload text, "
+        "are limited unless GEMINI_API_KEY is configured. You can still upload text, "
         "images, PDFs, or audio and ask for extraction, summaries, sentiment, code "
         "explanation, action items, or cross-input comparison."
     )

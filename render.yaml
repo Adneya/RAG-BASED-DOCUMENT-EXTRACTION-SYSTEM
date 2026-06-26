@@ -10,12 +10,12 @@ services:
         value: Multi-Input Agent
       - key: MAX_UPLOAD_MB
         value: "25"
-      - key: OPENAI_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
-      - key: OPENAI_CHAT_MODEL
-        value: gpt-4o-mini
-      - key: OPENAI_TRANSCRIPTION_MODEL
-        value: whisper-1
+      - key: GEMINI_CHAT_MODEL
+        value: gemini-2.0-flash
+      - key: GEMINI_AUDIO_MODEL
+        value: gemini-2.0-flash
       - key: YOUTUBE_TRANSCRIPT_LANGS
         value: en,en-US,en-GB
       - key: INPUT_PRICE_PER_MILLION_TOKENS
