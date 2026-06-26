@@ -23,8 +23,9 @@ pipeline = AgentPipeline()
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
+        request,
         "index.html",
-        {"request": request, "app_name": settings.app_name},
+        {"app_name": settings.app_name},
     )
 
 
@@ -39,4 +40,3 @@ async def chat(
     files: list[UploadFile] | None = File(default=None),
 ) -> AgentResponse:
     return await pipeline.run(query=query, files=files)
-
