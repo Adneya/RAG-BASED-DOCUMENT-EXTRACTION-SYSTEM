@@ -1,6 +1,6 @@
 # Multi-Input Agent
 
-A FastAPI application for the June 2026 DSAI assignment. It accepts text, images, PDFs, audio files, and multiple files in one request, extracts text, infers the user's goal, runs the minimum useful tool sequence, and returns text-only results with extracted text and a visible plan trace.
+A FastAPI application that accepts text, images, PDFs, audio files, and multiple files in one request, extracts text, infers the user's goal, runs the minimum useful tool sequence, and returns text-only results with extracted text and a visible plan trace.
 
 ## Features
 
