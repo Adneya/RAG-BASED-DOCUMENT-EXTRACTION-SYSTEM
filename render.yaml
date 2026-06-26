@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: multi-input-agent
+    env: docker
+    plan: starter
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: APP_NAME
+        value: Multi-Input Agent
+      - key: MAX_UPLOAD_MB
+        value: "25"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_CHAT_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_TRANSCRIPTION_MODEL
+        value: whisper-1
+      - key: YOUTUBE_TRANSCRIPT_LANGS
+        value: en,en-US,en-GB
+      - key: INPUT_PRICE_PER_MILLION_TOKENS
+        value: "0"
+      - key: OUTPUT_PRICE_PER_MILLION_TOKENS
+        value: "0"
+

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ app_name }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script defer src="/static/app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="conversation" aria-label="Agent chat">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Agent Console</p>
+            <h1>{{ app_name }}</h1>
+          </div>
+          <span id="statusBadge" class="status">Ready</span>
+        </header>
+
+        <div id="messages" class="messages" aria-live="polite">
+          <article class="message assistant">
+            <p>Upload files, ask a question, and I will choose the shortest useful tool path.</p>
+          </article>
+        </div>
+
+        <form id="chatForm" class="composer">
+          <label class="filePicker">
+            <input id="files" name="files" type="file" multiple accept=".txt,.md,.csv,.json,.jpg,.jpeg,.png,.pdf,.mp3,.wav,.m4a,image/*,audio/*,application/pdf">
+            <span>Select files</span>
+          </label>
+          <div id="fileList" class="fileList"></div>
+          <label class="queryBox">
+            <span class="srOnly">Query</span>
+            <textarea id="query" name="query" rows="3" placeholder="Ask for a summary, action items, sentiment, code explanation, transcript, or cross-file comparison."></textarea>
+          </label>
+          <button id="sendButton" type="submit">Send</button>
+        </form>
+      </section>
+
+      <aside class="workbench" aria-label="Run details">
+        <section class="panel">
+          <h2>Extracted Text</h2>
+          <div id="extractedText" class="scrollPanel muted">No run yet.</div>
+        </section>
+        <section class="panel">
+          <h2>Plan Trace</h2>
+          <ol id="planTrace" class="trace"></ol>
+        </section>
+        <section class="panel">
+          <h2>Estimate</h2>
+          <div id="costEstimate" class="muted">No estimate yet.</div>
+        </section>
+      </aside>
+    </main>
+  </body>
+</html>
+
