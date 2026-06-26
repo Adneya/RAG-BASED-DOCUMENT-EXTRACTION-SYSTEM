@@ -65,7 +65,7 @@ Render is the shortest path with the included `render.yaml`.
 3. Add `GEMINI_API_KEY` as a secret environment variable.
 4. Deploy and submit the generated public URL.
 
-Live deployment URL: add your deployed service URL here after deployment.
+Live deployment URL: https://rag-based-document-extraction-system.onrender.com
 
 ## Required Sample Checks
 
