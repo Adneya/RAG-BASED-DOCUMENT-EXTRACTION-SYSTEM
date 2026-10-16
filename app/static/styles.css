@@ -216,7 +216,7 @@ button:focus-visible,
 
 .workbench {
   display: grid;
-  grid-template-rows: minmax(240px, 1fr) auto auto;
+  grid-template-rows: minmax(220px, 1fr) minmax(180px, 0.75fr) auto auto;
   gap: 14px;
 }
 
@@ -280,6 +280,20 @@ summary {
   margin: 8px 0 0;
   padding-left: 20px;
   color: var(--warn);
+}
+
+.docCard {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.docCard button {
+  width: fit-content;
+  margin-top: 0.4rem;
 }
 
 .srOnly {

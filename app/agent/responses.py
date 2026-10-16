@@ -5,7 +5,7 @@ from collections import Counter
 
 from app.agent.intent import looks_like_code
 from app.agent.llm import ask_llm, last_llm_error, llm_available
-from app.schemas import ExtractedContent
+from app.schemas import ExtractedContent, ResearchPerspective, RetrievedContext
 from app.tools.text_processing import (
     clean_text,
     estimate_tokens,
@@ -49,6 +49,32 @@ NEGATIVE_WORDS = {
     "worse",
     "wrong",
 }
+
+
+def build_research_perspectives(
+    query: str,
+    final_output: str,
+    contexts: list[RetrievedContext],
+) -> list[ResearchPerspective]:
+    """Create distinct, source-aware views without inventing unsupported facts."""
+    sentences = split_sentences(final_output)
+    source_names = list(dict.fromkeys(context.filename for context in contexts))
+    evidence = contexts[0].text.strip() if contexts else "No indexed passage was strong enough to cite."
+    risk_terms = ("risk", "problem", "issue", "delay", "fail", "decline", "limitation", "concern")
+    opportunity_terms = ("improve", "growth", "benefit", "success", "increase", "opportunity", "strong")
+    action_terms = ("should", "recommend", "action", "next", "review", "use", "consider")
+
+    def matching(terms: tuple[str, ...], fallback: str) -> str:
+        selected = [sentence for sentence in sentences if any(term in sentence.lower() for term in terms)]
+        return " ".join(selected[:2]) or fallback
+
+    return [
+        ResearchPerspective(key="executive", title="Executive view", summary=sentences[0] if sentences else final_output[:400], confidence=.9 if contexts else .72, sources=source_names[:3]),
+        ResearchPerspective(key="evidence", title="Evidence lens", summary=evidence[:500], confidence=min(.99, max(.55, contexts[0].score)) if contexts else .45, sources=source_names[:3]),
+        ResearchPerspective(key="risks", title="Risk lens", summary=matching(risk_terms, "No explicit risk signal was identified in the returned answer; validate assumptions before acting."), confidence=.78 if contexts else .5, sources=source_names[:3]),
+        ResearchPerspective(key="opportunities", title="Opportunity lens", summary=matching(opportunity_terms, "No explicit opportunity signal was identified; compare this result with a broader time range."), confidence=.75 if contexts else .48, sources=source_names[:3]),
+        ResearchPerspective(key="actions", title="Action lens", summary=matching(action_terms, f"Clarify the decision behind '{query[:120]}' and review the cited passages with the relevant owner."), confidence=.8 if contexts else .55, sources=source_names[:3]),
+    ]
 
 
 def render_response(intent: str, query: str, contents: list[ExtractedContent]) -> str:
@@ -352,6 +378,59 @@ def answer_from_context(query: str, contents: list[ExtractedContent]) -> str:
     return "Based on the extracted content:\n" + "\n".join(
         f"- {truncate_words(sentence, 35)}" for sentence in relevant
     )
+
+
+def answer_from_rag(query: str, contexts: list[RetrievedContext]) -> str:
+    if not contexts:
+        return "I could not find relevant indexed context for that question."
+
+    context_text = format_rag_context(contexts)
+    llm_answer = ask_llm(
+        (
+            "Answer using only the retrieved context. Cite sources with bracketed "
+            "numbers like [1]. If the context is insufficient, say so directly."
+        ),
+        f"Question: {query}\n\nRetrieved context:\n{context_text}",
+    )
+    if llm_answer:
+        return ensure_sources(clean_text(llm_answer), contexts)
+
+    lines: list[str] = []
+    for index, context in enumerate(contexts, start=1):
+        relevant = extract_relevant_sentences(context.text, query, limit=2)
+        snippets = relevant or [truncate_words(context.text, 34)]
+        for snippet in snippets[:2]:
+            lines.append(f"- {truncate_words(snippet, 34)} [{index}]")
+
+    if not lines:
+        lines.append("- The retrieved chunks did not contain a concise answer.")
+
+    return "Based on retrieved context:\n" + "\n".join(lines) + "\n\n" + source_list(contexts)
+
+
+def format_rag_context(contexts: list[RetrievedContext]) -> str:
+    blocks = []
+    for index, context in enumerate(contexts, start=1):
+        page = f", page {context.page_number}" if context.page_number else ""
+        blocks.append(
+            f"[{index}] {context.filename}{page} "
+            f"(score {context.score:.2f})\n{context.text}"
+        )
+    return "\n\n".join(blocks)
+
+
+def ensure_sources(answer: str, contexts: list[RetrievedContext]) -> str:
+    if "Sources:" in answer:
+        return answer
+    return answer.rstrip() + "\n\n" + source_list(contexts)
+
+
+def source_list(contexts: list[RetrievedContext]) -> str:
+    lines = []
+    for index, context in enumerate(contexts, start=1):
+        page = f", page {context.page_number}" if context.page_number else ""
+        lines.append(f"[{index}] {context.filename}{page}")
+    return "Sources:\n" + "\n".join(lines)
 
 
 def conversational_answer(query: str) -> str:

@@ -1,0 +1,25 @@
+Date,Region,Product,Revenue,Orders,Customers,Operating_Cost
+2025-01-01,North,Analytics Suite,84200,184,121,51600
+2025-02-01,North,Analytics Suite,87800,191,127,52400
+2025-03-01,North,Analytics Suite,91500,204,133,53800
+2025-04-01,North,Analytics Suite,94600,211,139,55100
+2025-05-01,North,Analytics Suite,98200,219,146,56300
+2025-06-01,North,Analytics Suite,101400,226,152,57900
+2025-07-01,South,Analytics Suite,76800,171,112,49800
+2025-08-01,South,Analytics Suite,80200,179,118,50700
+2025-09-01,South,Analytics Suite,83500,185,123,51900
+2025-10-01,South,Analytics Suite,86100,192,129,53100
+2025-11-01,South,Analytics Suite,89200,198,134,54200
+2025-12-01,South,Analytics Suite,186500,371,236,88400
+2026-01-01,East,Analytics Suite,69400,153,104,46200
+2026-02-01,East,Analytics Suite,72100,160,109,47100
+2026-03-01,East,Analytics Suite,75500,167,114,48300
+2026-04-01,East,Analytics Suite,78100,173,119,49400
+2026-05-01,East,Analytics Suite,81400,181,124,50800
+2026-06-01,East,Analytics Suite,84600,188,131,52100
+2026-07-01,West,Analytics Suite,102300,221,149,61200
+2026-08-01,West,Analytics Suite,105800,229,155,62400
+2026-09-01,West,Analytics Suite,109600,237,161,63800
+2026-10-01,West,Analytics Suite,112400,244,166,65100
+2026-11-01,West,Analytics Suite,116900,252,172,66700
+2026-12-01,West,Analytics Suite,186500,361,239,88400

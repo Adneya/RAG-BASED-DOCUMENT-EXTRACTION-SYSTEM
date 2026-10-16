@@ -43,6 +43,13 @@ class Settings:
     output_price_per_million_tokens: float = float(
         os.getenv("OUTPUT_PRICE_PER_MILLION_TOKENS", "0")
     )
+    rag_store_dir: str = os.getenv("RAG_STORE_DIR", "data/chroma")
+    rag_collection_name: str = os.getenv("RAG_COLLECTION_NAME", "documents")
+    rag_chunk_tokens: int = int(os.getenv("RAG_CHUNK_TOKENS", "260"))
+    rag_chunk_overlap_tokens: int = int(os.getenv("RAG_CHUNK_OVERLAP_TOKENS", "45"))
+    rag_top_k: int = int(os.getenv("RAG_TOP_K", "5"))
+    rag_embedding_dimensions: int = int(os.getenv("RAG_EMBEDDING_DIMENSIONS", "384"))
+    auth_db_path: str = os.getenv("AUTH_DB_PATH", "data/app.db")
 
 
 settings = Settings()

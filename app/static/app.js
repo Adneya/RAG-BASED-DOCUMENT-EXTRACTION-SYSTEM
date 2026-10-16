@@ -5,9 +5,24 @@ const fileList = document.querySelector("#fileList");
 const messages = document.querySelector("#messages");
 const statusBadge = document.querySelector("#statusBadge");
 const extractedText = document.querySelector("#extractedText");
+const retrievedContext = document.querySelector("#retrievedContext");
 const planTrace = document.querySelector("#planTrace");
 const costEstimate = document.querySelector("#costEstimate");
+const documentLibrary = document.querySelector("#documentLibrary");
 const sendButton = document.querySelector("#sendButton");
+
+async function loadDocumentLibrary() {
+  try {
+    const response = await fetch("/api/rag/documents");
+    if (!response.ok) {
+      throw new Error("Unable to load document library.");
+    }
+    const documents = await response.json();
+    renderDocumentLibrary(documents);
+  } catch (error) {
+    documentLibrary.textContent = error.message;
+  }
+}
 
 fileInput.addEventListener("change", () => {
   const names = Array.from(fileInput.files).map((file) => file.name);
@@ -45,8 +60,10 @@ form.addEventListener("submit", async (event) => {
     const data = await response.json();
     addMessage("assistant", data.final_output || "No output returned.");
     renderExtracted(data.extracted_texts || []);
+    renderRetrieved(data.retrieved_contexts || []);
     renderTrace(data.plan_trace || []);
     renderEstimate(data.cost_estimate);
+    await loadDocumentLibrary();
     statusBadge.textContent = data.status || "Completed";
     if (data.status === "needs_clarification" && data.follow_up_question) {
       queryInput.value = "";
@@ -107,6 +124,52 @@ function renderExtracted(items) {
   });
 }
 
+function renderRetrieved(items) {
+  retrievedContext.innerHTML = "";
+  if (!items.length) {
+    retrievedContext.textContent = "No retrieved chunks for this run.";
+    return;
+  }
+
+  items.forEach((item, index) => {
+    const details = document.createElement("details");
+    details.open = index === 0;
+    const summary = document.createElement("summary");
+    const page = item.page_number ? ` | page ${item.page_number}` : "";
+    summary.textContent = `[${index + 1}] ${item.filename}${page} | score ${Number(item.score).toFixed(2)}`;
+    const body = document.createElement("pre");
+    body.textContent = item.text || "No chunk text returned.";
+    details.appendChild(summary);
+    details.appendChild(body);
+    retrievedContext.appendChild(details);
+  });
+}
+
+function renderDocumentLibrary(documents) {
+  documentLibrary.innerHTML = "";
+  if (!documents.length) {
+    documentLibrary.textContent = "No indexed documents yet.";
+    return;
+  }
+
+  documents.forEach((document) => {
+    const card = document.createElement("div");
+    card.className = "docCard";
+    card.innerHTML = `
+      <strong>${document.filename}</strong>
+      <div>Type: ${document.source_type}</div>
+      <div>Chunks: ${document.chunk_count}</div>
+      <div>Tokens: ${document.token_count}</div>
+      <button type="button" data-document-id="${document.document_id}">Remove</button>
+    `;
+    card.querySelector("button").addEventListener("click", async () => {
+      await fetch(`/api/rag/documents/${document.document_id}`, { method: "DELETE" });
+      await loadDocumentLibrary();
+    });
+    documentLibrary.appendChild(card);
+  });
+}
+
 function renderTrace(steps) {
   planTrace.innerHTML = "";
   if (!steps.length) {
@@ -146,4 +209,6 @@ function setBusy(isBusy) {
   queryInput.disabled = isBusy;
   statusBadge.textContent = isBusy ? "Working" : "Ready";
 }
+
+loadDocumentLibrary();
 

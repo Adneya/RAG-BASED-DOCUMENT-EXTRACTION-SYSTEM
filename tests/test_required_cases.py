@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.agent.pipeline import AgentPipeline
@@ -9,6 +10,21 @@ from app.tools.youtube import YouTubeTranscript
 class DummyUpload:
     def __init__(self, filename: str):
         self.filename = filename
+
+
+class NoopRagStore:
+    def rewrite_query(self, query):
+        return query.strip()
+
+    def ingest_contents(self, contents):
+        return SimpleNamespace(documents=[], chunks_indexed=0)
+
+    def retrieve(self, query, *, top_k=None, document_ids=None):
+        return []
+
+
+def pipeline() -> AgentPipeline:
+    return AgentPipeline(rag_store=NoopRagStore())
 
 
 class RequiredWorkflowTests(unittest.IsolatedAsyncioTestCase):
@@ -29,7 +45,7 @@ class RequiredWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 duration_seconds=300,
             )
 
-            response = await AgentPipeline().run(
+            response = await pipeline().run(
                 query="Summarize this",
                 files=[DummyUpload("lecture.wav")],
             )
@@ -56,7 +72,7 @@ class RequiredWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 text=notes,
             )
 
-            response = await AgentPipeline().run(
+            response = await pipeline().run(
                 query="What are the action items?",
                 files=[DummyUpload("meeting-notes.pdf")],
             )
@@ -79,7 +95,7 @@ class RequiredWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 ocr_confidence=0.92,
             )
 
-            response = await AgentPipeline().run(
+            response = await pipeline().run(
                 query="Explain",
                 files=[DummyUpload("code-screenshot.png")],
             )
@@ -118,7 +134,7 @@ class RequiredWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 warnings=[],
             )
 
-            response = await AgentPipeline().run(
+            response = await pipeline().run(
                 query="Hit the YT URL in this PDF and give me a summary of it",
                 files=[DummyUpload("source-link.pdf")],
             )
@@ -157,7 +173,7 @@ class RequiredWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ]
 
-            response = await AgentPipeline().run(
+            response = await pipeline().run(
                 query="Do the audio and the document discuss the same topic?",
                 files=[DummyUpload("lecture.wav"), DummyUpload("notes.pdf")],
             )

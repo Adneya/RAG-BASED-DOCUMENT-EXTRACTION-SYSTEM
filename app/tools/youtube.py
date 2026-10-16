@@ -47,6 +47,27 @@ def extract_video_id(url: str) -> str | None:
     return None
 
 
+def _transcript_text_item(item: object) -> str:
+    if isinstance(item, dict):
+        return str(item.get("text", ""))
+    return str(getattr(item, "text", ""))
+
+
+def _transcript_items(transcript: object) -> object:
+    to_raw_data = getattr(transcript, "to_raw_data", None)
+    if callable(to_raw_data):
+        return to_raw_data()
+    return transcript
+
+
+def _fetch_transcript(api_class: type, video_id: str, languages: list[str]) -> object:
+    legacy_get_transcript = getattr(api_class, "get_transcript", None)
+    if callable(legacy_get_transcript):
+        return legacy_get_transcript(video_id, languages=languages)
+
+    return api_class().fetch(video_id, languages=languages)
+
+
 def fetch_youtube_transcript(url: str) -> YouTubeTranscript:
     video_id = extract_video_id(url)
     if not video_id:
@@ -63,10 +84,10 @@ def fetch_youtube_transcript(url: str) -> YouTubeTranscript:
         )
 
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(
-            video_id, languages=list(settings.youtube_languages)
+        transcript = _fetch_transcript(
+            YouTubeTranscriptApi, video_id, list(settings.youtube_languages)
         )
-        text = clean_text(" ".join(item.get("text", "") for item in transcript))
+        text = clean_text(" ".join(_transcript_text_item(item) for item in _transcript_items(transcript)))
         return YouTubeTranscript(url, video_id, text, [])
     except Exception as exc:  # pragma: no cover - network/external content
         return YouTubeTranscript(
@@ -75,4 +96,3 @@ def fetch_youtube_transcript(url: str) -> YouTubeTranscript:
             "",
             [f"Transcript could not be fetched for this video: {exc}"],
         )
-

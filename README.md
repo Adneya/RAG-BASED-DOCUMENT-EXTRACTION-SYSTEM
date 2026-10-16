@@ -10,10 +10,34 @@ A FastAPI application that accepts text, images, PDFs, audio files, and multiple
 - Audio transcription for MP3, WAV, and M4A through Gemini when `GEMINI_API_KEY` is set, with duration reporting when WAV metadata or `ffprobe` is available.
 - Open-ended conversational answers use Gemini when `GEMINI_API_KEY` is set.
 - YouTube URL detection from any extracted input and transcript fetching through `youtube-transcript-api`.
+- RAG indexing with local chunking, deterministic embeddings, persistent ChromaDB storage, retrieval, and source citations.
 - Intent handling for extraction, YouTube transcript summary, conversational answering, summaries, sentiment, code explanation, audio summary, action items, and cross-input comparison.
 - Mandatory follow-up behavior when the user goal is unclear.
 - Plan trace, extracted text panel, warnings, and token/cost estimate.
 - Dockerfile and Render deployment configuration.
+
+## Target GUI Stack
+
+The current UI is served by FastAPI with Jinja templates, vanilla JavaScript, and CSS. For the professional dashboard upgrade, use this frontend stack:
+
+| Layer | Choice |
+| --- | --- |
+| Frontend app | React with Vite |
+| Language | TypeScript |
+| Styling | Tailwind CSS |
+| Component system | shadcn/ui |
+| Icons | Lucide React |
+| API data fetching | TanStack Query |
+| Local UI state | Zustand |
+| Tables | TanStack Table |
+| Charts and metrics | Recharts |
+| File upload UX | react-dropzone |
+| PDF preview | PDF.js |
+| Frontend tests | Vitest, React Testing Library, Playwright |
+| Backend integration | FastAPI remains the API service through `/api/chat` |
+| Deployment | FastAPI on Render, frontend on Render Static Site or Vercel |
+
+This stack keeps the backend stable while giving the GUI a modern dashboard foundation with strong typing, reusable components, document previews, and production-quality state/data handling.
 
 ## Local Setup
 
@@ -46,6 +70,21 @@ Copy `.env.example` and set values in your deployment provider.
 | `YOUTUBE_TRANSCRIPT_LANGS` | No | Comma-separated transcript language preference. |
 | `INPUT_PRICE_PER_MILLION_TOKENS` | No | Optional cost estimator input rate. |
 | `OUTPUT_PRICE_PER_MILLION_TOKENS` | No | Optional cost estimator output rate. |
+| `RAG_STORE_DIR` | No | Persistent ChromaDB directory. Defaults to `data/chroma`. |
+| `RAG_COLLECTION_NAME` | No | Chroma collection name. Defaults to `documents`. |
+| `RAG_CHUNK_TOKENS` | No | Approximate chunk size for indexed text. Defaults to `260`. |
+| `RAG_CHUNK_OVERLAP_TOKENS` | No | Approximate chunk overlap. Defaults to `45`. |
+| `RAG_TOP_K` | No | Number of chunks retrieved for grounded answers. Defaults to `5`. |
+| `RAG_EMBEDDING_DIMENSIONS` | No | Size of the local hashing embedding vector. Defaults to `384`. |
+
+## RAG API
+
+The normal `/api/chat` endpoint now indexes uploaded readable content and uses retrieved chunks for document questions. Dedicated RAG endpoints are also available:
+
+- `POST /api/rag/ingest` with multipart `files` to extract, chunk, embed, and persist documents.
+- `POST /api/rag/query` with JSON `{"query": "...", "top_k": 5}` to answer from indexed documents with citations.
+- `GET /api/rag/documents` to list indexed documents.
+- `DELETE /api/rag/documents/{document_id}` to remove one indexed document.
 
 ## Docker
 

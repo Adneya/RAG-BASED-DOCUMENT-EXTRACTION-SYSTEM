@@ -1,17 +1,45 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import UploadFile
 
 from app.agent.intent import infer_intent
-from app.agent.responses import estimate_text_tokens, render_response
+from app.agent.responses import answer_from_rag, build_research_perspectives, estimate_text_tokens, render_response
 from app.config import settings
-from app.schemas import AgentResponse, CostEstimate, ExtractedContent, PlanStep
+from app.rag.store import RagStore, get_default_rag_store
+from app.schemas import (
+    AgentResponse,
+    CostEstimate,
+    ExtractedContent,
+    PlanStep,
+    RetrievedContext,
+)
 from app.tools.extraction import extract_upload
-from app.tools.text_processing import clean_text
+from app.tools.text_processing import clean_text, keywords
 from app.tools.youtube import detect_youtube_urls, fetch_youtube_transcript
 
 
 class AgentPipeline:
+    def __init__(self, rag_store: RagStore | None = None) -> None:
+        self._rag_store = rag_store
+        self.conversation_memory: list[str] = []
+
+    def _prepare_query(self, query: str) -> str:
+        rewritten = self.rag_store.rewrite_query(query)
+        if not rewritten:
+            return query.strip()
+        memory_context = "\n".join(self.conversation_memory[-3:])
+        if memory_context and re.match(r"^(it|that|this|they|those|these|he|she|the)\b", query.strip(), re.IGNORECASE):
+            return f"{rewritten} Context: {memory_context}"
+        return rewritten
+
+    @property
+    def rag_store(self) -> RagStore:
+        if self._rag_store is None:
+            self._rag_store = get_default_rag_store()
+        return self._rag_store
+
     async def run(
         self,
         query: str,
@@ -19,6 +47,7 @@ class AgentPipeline:
     ) -> AgentResponse:
         plan: list[PlanStep] = []
         extracted: list[ExtractedContent] = []
+        indexed_document_ids: list[str] = []
         uploads = [file for file in files or [] if file.filename]
 
         if uploads:
@@ -42,7 +71,17 @@ class AgentPipeline:
                 )
             )
 
-        combined = clean_text(query + "\n\n" + "\n\n".join(item.text for item in extracted))
+        if extracted:
+            indexed_document_ids.extend(
+                self.index_contents(
+                    extracted,
+                    plan,
+                    action="Index uploaded content for retrieval",
+                )
+            )
+
+        search_query = self._prepare_query(query)
+        combined = clean_text(search_query + "\n\n" + "\n\n".join(item.text for item in extracted))
         youtube_urls = detect_youtube_urls(combined)
         plan.append(
             PlanStep(
@@ -51,7 +90,7 @@ class AgentPipeline:
                 status="running",
             )
         )
-        decision = infer_intent(query, extracted, youtube_urls)
+        decision = infer_intent(search_query, extracted, youtube_urls)
         plan[-1].status = "completed"
         plan[-1].detail = decision.reason
 
@@ -71,6 +110,7 @@ class AgentPipeline:
                 extracted_texts=extracted,
                 plan_trace=plan,
                 cost_estimate=build_cost_estimate(query, extracted),
+                perspectives=build_research_perspectives(query, decision.follow_up_question or "Could you clarify the task?", []),
             )
 
         if decision.intent == "youtube_summary":
@@ -100,26 +140,132 @@ class AgentPipeline:
                 if failures
                 else "Transcript fetch completed."
             )
+            indexed_document_ids.extend(
+                self.index_contents(
+                    youtube_contents,
+                    plan,
+                    action="Index YouTube transcript content for retrieval",
+                )
+            )
+
+        retrieved_contexts: list[RetrievedContext] = []
+        response_intent = decision.intent
+        final_output: str | None = None
+
+        if decision.intent == "context_answer":
+            retrieved_contexts = self.retrieve_contexts(
+                search_query,
+                plan,
+                document_ids=indexed_document_ids or None,
+            )
+            if retrieved_contexts:
+                final_output = answer_from_rag(search_query, retrieved_contexts)
+            else:
+                final_output = render_response(decision.intent, search_query, extracted)
+
+        elif decision.intent == "conversation":
+            retrieved_contexts = self.retrieve_contexts(search_query, plan)
+            if should_use_rag(search_query, retrieved_contexts):
+                response_intent = "context_answer"
+                final_output = answer_from_rag(search_query, retrieved_contexts)
+            else:
+                retrieved_contexts = []
+                final_output = render_response(decision.intent, search_query, extracted)
 
         plan.append(
             PlanStep(
                 tool="response_builder",
-                action=f"Generate final text output for intent: {decision.intent}",
+                action=f"Generate final text output for intent: {response_intent}",
                 status="running",
             )
         )
-        final_output = render_response(decision.intent, query, extracted)
+        if final_output is None:
+            final_output = render_response(decision.intent, query, extracted)
         plan[-1].status = "completed"
         plan[-1].detail = "Final text-only output generated."
+
+        if final_output:
+            self.conversation_memory.append(f"Q: {query}\nA: {final_output}")
+            if len(self.conversation_memory) > 5:
+                self.conversation_memory = self.conversation_memory[-5:]
 
         status = "partial" if any(item.warnings for item in extracted) else "completed"
         return AgentResponse(
             status=status,
             final_output=final_output,
             extracted_texts=extracted,
+            retrieved_contexts=retrieved_contexts,
+            perspectives=build_research_perspectives(query, final_output, retrieved_contexts),
             plan_trace=plan,
             cost_estimate=build_cost_estimate(query, extracted),
         )
+
+    def index_contents(
+        self,
+        contents: list[ExtractedContent],
+        plan: list[PlanStep],
+        *,
+        action: str,
+    ) -> list[str]:
+        plan.append(
+            PlanStep(
+                tool="rag_indexer",
+                action=action,
+                status="running",
+            )
+        )
+        try:
+            result = self.rag_store.ingest_contents(contents)
+        except Exception as exc:
+            plan[-1].status = "failed"
+            plan[-1].detail = f"RAG indexing failed: {type(exc).__name__}: {exc}"
+            return []
+
+        if result.chunks_indexed == 0:
+            plan[-1].status = "skipped"
+            plan[-1].detail = "No readable text was available to index."
+            return []
+
+        plan[-1].status = "completed"
+        plan[-1].detail = (
+            f"Indexed {result.chunks_indexed} chunk(s) across "
+            f"{len(result.documents)} document(s)."
+        )
+        return [document.document_id for document in result.documents]
+
+    def retrieve_contexts(
+        self,
+        query: str,
+        plan: list[PlanStep],
+        *,
+        document_ids: list[str] | None = None,
+    ) -> list[RetrievedContext]:
+        plan.append(
+            PlanStep(
+                tool="rag_retriever",
+                action="Retrieve relevant indexed chunks",
+                status="running",
+            )
+        )
+        try:
+            contexts = self.rag_store.retrieve(
+                query,
+                top_k=settings.rag_top_k,
+                document_ids=document_ids,
+            )
+        except Exception as exc:
+            plan[-1].status = "failed"
+            plan[-1].detail = f"RAG retrieval failed: {type(exc).__name__}: {exc}"
+            return []
+
+        if not contexts:
+            plan[-1].status = "skipped"
+            plan[-1].detail = "No relevant indexed chunks were found."
+            return []
+
+        plan[-1].status = "completed"
+        plan[-1].detail = f"Retrieved {len(contexts)} chunk(s) for grounded answering."
+        return contexts
 
 
 def build_cost_estimate(query: str, contents: list[ExtractedContent]) -> CostEstimate:
@@ -144,4 +290,19 @@ def build_cost_estimate(query: str, contents: list[ExtractedContent]) -> CostEst
         estimated_usd=estimated_usd,
         note=note,
     )
+
+
+def should_use_rag(query: str, contexts: list[RetrievedContext]) -> bool:
+    if not contexts:
+        return False
+
+    query_terms = set(keywords(query, limit=12))
+    if not query_terms:
+        return False
+
+    for context in contexts[:3]:
+        lowered = context.text.lower()
+        if any(term in lowered for term in query_terms):
+            return True
+    return False
 

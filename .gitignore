@@ -9,4 +9,5 @@ venv/
 .codex/
 uploads/
 tmp/
+data/
 *.log
