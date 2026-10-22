@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -30,15 +30,21 @@ from app.tools.extraction import extract_upload
 
 
 BASE_DIR = Path(__file__).resolve().parent
+FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 
 app = FastAPI(title=settings.app_name)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+if (FRONTEND_DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="frontend-assets")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 pipeline = AgentPipeline()
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
+async def index(request: Request) -> Response:
+    frontend_index = FRONTEND_DIST / "index.html"
+    if frontend_index.is_file():
+        return FileResponse(frontend_index, media_type="text/html")
     return templates.TemplateResponse(
         request,
         "index.html",
